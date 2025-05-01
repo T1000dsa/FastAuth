@@ -1,3 +1,9 @@
+#Hosting	AWS ECS / Google Cloud Run
+#Database	PostgreSQL (RDS / Cloud SQL)
+#Cache	Redis (ElastiCache / Memorystore)
+#CI/CD	GitHub Actions / GitLab CI
+#Monitoring	Grafana + Prometheus
+
 from fastapi import FastAPI
 from contextlib import asynccontextmanager
 import uvicorn
