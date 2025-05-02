@@ -1,0 +1,70 @@
+services:
+
+  db:
+    container_name: postgresql_db
+    image: postgres:latest
+    restart: always
+    ports:
+      - ${FAST__DB__PORT}:5432
+    env_file:
+      - .env
+    environment:
+      - POSTGRES_USER=${FAST__DB__USER}
+      - POSTGRES_PASSWORD=${FAST__DB__PASSWORD}
+      - POSTGRES_DB=${FAST__DB__NAME}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - db-data:/var/lib/postgresql/data
+
+  pgadmin:
+    container_name: pgadmin
+    image: dpage/pgadmin4:latest
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=someemail@gmail.com
+      - PGADMIN_DEFAULT_PASSWORD=somepassword
+    ports:
+      - 5050:80
+    depends_on:
+      - db
+  backend:
+    image: fastapi-container
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      - DB_HOST=db
+      - POSTGRES_USER=${FAST__DB__USER}
+      - POSTGRES_PASSWORD=${FAST__DB__PASSWORD}
+      - POSTGRES_DB=${FAST__DB__NAME}
+      - FAST__RUN__HOST=${FAST__RUN__HOST}
+      - FAST__RUN__PORT=${FAST__RUN__PORT}
+    container_name: app
+    command: >
+      bash -c "
+        pip install alembic &&
+        alembic upgrade head &&
+        uvicorn main:app --host 0.0.0.0 --port $$FAST__RUN__PORT --reload
+      "
+    volumes:
+      - .:/app
+      - media-data:/app/src/media_root
+    ports:
+      - "${FAST__RUN__PORT}:${FAST__RUN__PORT}"
+    restart: always
+
+  redis:
+    container_name: redis
+    image: redis:latest
+
+volumes:
+  db-data:
+  media-data:

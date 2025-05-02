@@ -1,4 +1,5 @@
-from typing import AsyncGenerator
+from fastapi import Depends
+from typing import AsyncGenerator, Annotated
 from sqlalchemy.ext.asyncio import (
     create_async_engine,
     AsyncEngine,
@@ -40,9 +41,11 @@ class DbHelper:
 
 
 db_helper = DbHelper(
-    url=str(settings.db.give_url()),
+    url=str(settings.db.give_url),
     echo=settings.db.echo,
     echo_pool=settings.db.echo_pool,
     pool_size=settings.db.pool_size,
     max_overflow=settings.db.max_overflow
 )
+DBDI = Annotated[AsyncSession, Depends(db_helper.session_getter)]
+DBDI_WIPING = Annotated[AsyncSession, Depends(db_helper.dispose)]

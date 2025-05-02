@@ -10,11 +10,9 @@ class RunConfig(BaseModel):
 
 class ApiPrefix_V1(BaseModel):
     """
-    prefix:str default - /v1
-    users:str default - /users
+    prefix:str default - /auth
     """
-    prefix:str='/v1'
-    users:str='/users'
+    prefix:str='/auth'
 
 class Current_ApiPrefix(BaseModel):
     api_data:ApiPrefix_V1 = ApiPrefix_V1()
@@ -53,19 +51,21 @@ class DatabaseConfig(BaseModel):
 
     database:CurrentDB = CurrentDB()
 
+    @property
     def give_url(self):
-        current_db = self.database.database
+        current_db = self.database.database.lower() 
+
         if current_db == 'postgres':
             return f"postgresql+asyncpg://{self.user}:{self.password}@{self.host}:{self.port}/{self.name}"
-        
+    
         if current_db == 'mysql':
-            pass
+            return f"mysql+asyncmy://{self.user}:{self.password}@{self.host}:{self.port}/{self.name}"
         
         if current_db == 'mongodb':
-            pass
-
+            return f"mongodb://{self.user}:{self.password}@{self.host}:{self.port}/{self.name}"
+        
         if current_db == 'mariadb':
-            pass
-
-        if current_db == 'mongodb':
-            pass
+            return f"mariadb+asyncmy://{self.user}:{self.password}@{self.host}:{self.port}/{self.name}"
+        
+        # Default case if database type is not recognized
+        raise ValueError(f"Unsupported database type: {current_db}")

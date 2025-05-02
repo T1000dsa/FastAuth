@@ -1,5 +1,6 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
-import logging
+from pathlib import Path 
+from fastapi.templating import Jinja2Templates
 
 from src.core.config.models import (
     RunConfig, 
@@ -10,13 +11,9 @@ from src.core.config.models import (
     )
 
 
-logger = logging.getLogger(__name__)
-
-logging.basicConfig(
-        level=logging.DEBUG,
-        format='%(filename)s:%(lineno)d #%(levelname)-8s '
-               '[%(asctime)s] - %(name)s - %(message)s')
-
+base_dir = Path(__file__).parent.parent.parent
+frontend_root = base_dir / 'frontend' / 'templates'
+templates = Jinja2Templates(directory=frontend_root)
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -27,7 +24,7 @@ class Settings(BaseSettings):
         extra='ignore'
     )
     run: RunConfig = RunConfig()  # Keep defaults as fallback
-    data: Current_ApiPrefix = Current_ApiPrefix()
+    prefix: Current_ApiPrefix = Current_ApiPrefix()
     mode: Mode = Mode()
     db: DatabaseConfig
     redis_settings: RedisSettings = RedisSettings()
@@ -36,4 +33,5 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
-assert settings.mode.mode in ('DEV', 'TEST')
+if settings.mode.mode not in ('DEV', 'TEST'):
+    raise Exception('mode should be DEV or TEST')
