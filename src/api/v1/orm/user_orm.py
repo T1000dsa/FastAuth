@@ -1,11 +1,11 @@
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.exc import SQLAlchemyError, IntegrityError
 from sqlalchemy import select, update, delete, join
 from typing import Union, Optional
 import logging
 
 from src.core.services.database.postgres.models.user import UserModel
 from src.core.schemas.pydantic_schemas.user import UserSchema as User_pydantic
-from src.core.config.config import settings
 
 
 logger = logging.getLogger(__name__)
@@ -42,7 +42,7 @@ async def select_user_email(
     ) -> Optional[UserModel]:
     try:
         if isinstance(data, str):
-            query = select(UserModel).where(UserModel.mail == data)
+            query = select(UserModel).where(UserModel.email == data)
 
         result = await session.execute(query)
         return result.scalar_one_or_none()
@@ -57,16 +57,33 @@ async def select_user_email(
 
     
 async def insert_data(
-          session:AsyncSession,
-          data:User_pydantic=None
-          ):
-    if type(data) == User_pydantic:
-        res = User_pydantic.model_validate(data, from_attributes=True)
-        user_data = {i:k for i, k in res.model_dump().items() if i != 'password_again'}
-        new_data = UserModel(**user_data)
-        new_data.set_password(new_data.password)
-        session.add(new_data)
-        await session.commit()
+    session: AsyncSession,
+    data: User_pydantic = None
+) -> None:
+    logger.debug(f'{type(data)}')
+    try:
+        if isinstance(data, User_pydantic):
+            res = User_pydantic.model_validate(data, from_attributes=True)
+            user_data = {i: k for i, k in res.model_dump().items() if i != 'password_again'}
+            new_data = UserModel(**user_data)
+            new_data.set_password(new_data.password)
+            session.add(new_data)
+            await session.commit()
+            await session.refresh(new_data)  # Refresh to get any database-generated values
+            logger.debug('Create user success')
+            return new_data
+        else:
+            logger.error('Invalid data type provided')
+            raise ValueError("Invalid data type provided")
+        
+    except IntegrityError as err:
+        logger.info(f'{err}') 
+        raise err
+        
+    except Exception as e:
+        logger.error(f'Error creating user: {e}')
+        await session.rollback()
+        raise e
 
 async def update_data(
             session:AsyncSession,
@@ -80,12 +97,17 @@ async def update_data(
         await session.execute(stm)
         await session.commit()
 
-async def delete_data(
-            session:AsyncSession,
-            data_id:int=None
+async def delete_users(
+            session:AsyncSession
             ):
 
-    stm = (delete(UserModel).where(UserModel.id==data_id)) 
+    stm = (delete(UserModel)) 
 
     await session.execute(stm)
     await session.commit()
+
+async def get_all_users(session:AsyncSession):
+    query = select(UserModel)
+    res = await session.execute(query)
+    result = res.scalars().all()
+    return result

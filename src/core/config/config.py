@@ -10,7 +10,6 @@ from src.core.config.models import (
     RedisSettings, 
     )
 
-
 base_dir = Path(__file__).parent.parent.parent
 frontend_root = base_dir / 'frontend' / 'templates'
 templates = Jinja2Templates(directory=frontend_root)

@@ -9,5 +9,5 @@ async def prepare_template(
         ):
     
     template_data = TemplateData(**data).model_dump(exclude_none=True)
-    template_data.update(**additional_data)
+    template_data.update(**additional_data if additional_data else {})
     return template_data

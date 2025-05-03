@@ -1,5 +1,4 @@
 from fastapi import Depends
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.services.user.user import UserService
 from src.core.dependencies.db_helper import DBDI

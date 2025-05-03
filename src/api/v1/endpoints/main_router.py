@@ -1,13 +1,10 @@
 from fastapi import APIRouter
-from fastapi.concurrency import run_in_threadpool
-from concurrent.futures import ProcessPoolExecutor
 from fastapi.requests import Request
-from fastapi.templating import Jinja2Templates
 import logging
 
-from src.core.config.config import settings
 from src.core.config.config import templates
 from src.core.utils.prepared_templates import prepare_template
+from src.core.menu.urls import choice_from_menu, get_menu
 
 
 logger = logging.getLogger(__name__)
@@ -22,7 +19,9 @@ async def index_func(request:Request):
     template_response_body_data = await prepare_template(
         data=prepared_data,
         additional_data={
-            "request":request
+            "request":request,
+            "menu_data":choice_from_menu,
+            "menu":get_menu()
             }
         )
 

@@ -2,6 +2,7 @@ from sqlalchemy.orm import (
     mapped_column,
     Mapped
     )
+from sqlalchemy import func, String
 from typing import Optional
 import logging
 import bcrypt
@@ -16,14 +17,16 @@ class UserModel(Base):
     __tablename__ = 'users'
 
     id: Mapped[int_pk]
-    username: Mapped[str]
-    password: Mapped[str]
-    mail: Mapped[Optional[str]]
-    bio: Mapped[Optional[str]]
-    join_data: Mapped[created_at]
+    username: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
+    public_name: Mapped[Optional[str]] = mapped_column(String(100))
+    password: Mapped[str] = mapped_column(String(128), nullable=False)
+    email: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    bio: Mapped[Optional[str]] = mapped_column(String(500))
+    join_date: Mapped[created_at]
     last_time_login: Mapped[updated_at]
-    is_active:Mapped[bool] = mapped_column(default=True, nullable=True)
-    is_super_user: Mapped[bool] = mapped_column(default=False)
+    is_active:Mapped[bool] = mapped_column(default=True)
+    is_superuser: Mapped[bool] = mapped_column(default=False)
+
 
     def __repr__(self):
         return f"<User(id={self.id}, username={self.username})>"

@@ -56,7 +56,6 @@ services:
       "
     volumes:
       - .:/app
-      - media-data:/app/src/media_root
     ports:
       - "${FAST__RUN__PORT}:${FAST__RUN__PORT}"
     restart: always
@@ -67,4 +66,3 @@ services:
 
 volumes:
   db-data:
-  media-data:

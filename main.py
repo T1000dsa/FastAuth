@@ -3,7 +3,6 @@
 #Cache	Redis (ElastiCache / Memorystore)
 #CI/CD	GitHub Actions / GitLab CI
 #Monitoring	Grafana + Prometheus
-#docker stop $(docker ps -aq) 2>/dev/null; docker rm -f $(docker ps -aq) 2>/dev/null; docker rmi -f $(docker images -aq) 2>/dev/null; docker network prune -f 2>/dev/null; docker system prune -af 2>/dev/null
 
 # TODO1 User Registration & Login [0] JWT/OAuth2
 # TODO2 Password Hashing & Security [0] bcrypt/Argon2
@@ -31,6 +30,9 @@
 # global_TODO Deployment [0] Docker+K8s
 # global_TODO Security Audit [0] OWASP checklist
 
+# docker compose up -d --build
+# docker stop $(docker ps -aq) 2>/dev/null; docker rm -f $(docker ps -aq) 2>/dev/null; docker rmi -f $(docker images -aq) 2>/dev/null; docker network prune -f 2>/dev/null; docker system prune -af 2>/dev/null
+
 from fastapi import FastAPI
 from contextlib import asynccontextmanager
 from logging.config import dictConfig
@@ -44,7 +46,7 @@ from src.core.config.logger import LOG_CONFIG
 from src.api.v1.endpoints.healthcheck import router as health_router
 from src.api.v1.endpoints.main_router import router as main_router
 from src.api.v1.auth.authentication import router as auth_router
-
+from src.api.v1.endpoints.side_router_1 import router as side_router_1
 
 
 app = FastAPI()
@@ -53,11 +55,9 @@ app = FastAPI()
 async def lifespan(app: FastAPI):
     dictConfig(LOG_CONFIG)
     logger = logging.getLogger(__name__)
-    logger.info("🚀 Starting app...")
     
     yield  # FastAPI handles requests here
 
-    logger.info("🛑 Shutting down...")
     try:
         await db_helper.dispose()
         logger.info("✅ Connection pool closed cleanly")
@@ -71,6 +71,7 @@ app = FastAPI(lifespan=lifespan)
 app.include_router(health_router)
 app.include_router(main_router)
 app.include_router(auth_router)
+app.include_router(side_router_1)
 
 
 if __name__ == '__main__':
@@ -79,6 +80,5 @@ if __name__ == '__main__':
         host=settings.run.host,
         port=settings.run.port,
         reload=True,
-        log_config=LOG_CONFIG,
-        access_log=False,
+        log_config=LOG_CONFIG
         )
