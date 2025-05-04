@@ -69,3 +69,7 @@ class DatabaseConfig(BaseModel):
         
         # Default case if database type is not recognized
         raise ValueError(f"Unsupported database type: {current_db}")
+
+class JwtConfig(BaseModel):
+    key:str
+    algorithm:str = 'HS256'

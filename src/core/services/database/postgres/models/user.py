@@ -1,14 +1,19 @@
+from __future__ import annotations
 from sqlalchemy.orm import (
     mapped_column,
-    Mapped
+    Mapped, 
+    relationship
     )
 from sqlalchemy import func, String
-from typing import Optional
+from typing import Optional,List, TYPE_CHECKING
 import logging
 import bcrypt
 
 from src.core.services.database.postgres.models.base import Base, int_pk, created_at, updated_at
 
+
+if TYPE_CHECKING:
+    from src.core.services.database.postgres.models.refresh_token import RefreshTokenModel  # Path to your UserModel
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +32,11 @@ class UserModel(Base):
     is_active:Mapped[bool] = mapped_column(default=True)
     is_superuser: Mapped[bool] = mapped_column(default=False)
 
+    refresh_tokens: Mapped[List["RefreshTokenModel"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan"
+    )
+
 
     def __repr__(self):
         return f"<User(id={self.id}, username={self.username})>"
@@ -43,3 +53,15 @@ class UserModel(Base):
         except Exception as err:
             logger.error(f"Password verification failed for user {self.id}: {err}")
             return False
+        
+    def revoke_all_tokens(self):
+        """Revoke all refresh tokens for this user"""
+        for token in self.refresh_tokens:
+            token.revoked = True
+            token.replaced_by_token = None
+
+    def revoke_device_tokens(self, device_info: str):
+        """Revoke tokens for a specific device"""
+        for token in self.refresh_tokens:
+            if token.device_info == device_info:
+                token.revoked = True

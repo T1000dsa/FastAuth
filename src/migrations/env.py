@@ -7,6 +7,7 @@ from alembic import context
 
 from src.core.services.database.postgres.models.base import Base
 from src.core.services.database.postgres.models.user import UserModel
+from src.core.services.database.postgres.models.refresh_token import RefreshTokenModel
 from src.core.config.config import settings
 # alembic revision --autogenerate
 # alembic upgrade head

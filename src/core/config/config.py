@@ -8,6 +8,7 @@ from src.core.config.models import (
     Mode, 
     DatabaseConfig, 
     RedisSettings, 
+    JwtConfig
     )
 
 base_dir = Path(__file__).parent.parent.parent
@@ -27,6 +28,7 @@ class Settings(BaseSettings):
     mode: Mode = Mode()
     db: DatabaseConfig
     redis_settings: RedisSettings = RedisSettings()
+    jwt:JwtConfig
     #elastic:ElasticSearch = ElasticSearch()
     #email:Email_Settings = Email_Settings()
 

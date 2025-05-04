@@ -38,6 +38,7 @@ async def select_user_email(
     try:
         if isinstance(data, str):
             query = select(UserModel).where(UserModel.email == data)
+            
 
         result = await session.execute(query)
         return result.scalar_one_or_none()

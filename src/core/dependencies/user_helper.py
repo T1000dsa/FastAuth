@@ -3,7 +3,7 @@ from fastapi import Depends
 from src.core.services.user.user import UserService
 from src.core.dependencies.db_helper import DBDI
 from src.core.services.database.postgres.models.user import UserModel
-from src.core.services.auth.auth import oauth2_scheme
+from src.core.config.auth_config import oauth2_scheme
 
 def get_user_service(db: DBDI) -> UserService:
     return UserService(db)

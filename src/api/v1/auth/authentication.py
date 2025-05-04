@@ -1,25 +1,29 @@
-from fastapi import APIRouter, Depends, HTTPException, Form
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from fastapi import APIRouter, Depends, HTTPException, Form, status
 from fastapi.requests import Request
 from fastapi.responses import RedirectResponse
-from sqlalchemy.exc import SQLAlchemyError, IntegrityError
-from urllib.parse import quote
-from typing import Optional
+from sqlalchemy.exc import IntegrityError
 import logging
 
 from src.core.dependencies.form_data import form_data
-from src.core.services.auth.auth import TokenDep
-from src.core.config.config import settings
+from src.core.config.auth_config import oauth2_scheme
 from src.core.schemas.pydantic_schemas.user import UserSchema
-from src.core.config.config import templates
+from src.core.config.config import templates, settings
 from src.core.utils.prepared_templates import prepare_template
 from src.core.dependencies.db_helper import DBDI
 from src.core.services.user.user import UserService
 from src.core.menu.urls import choice_from_menu, menu_items
+from src.core.config.auth_config import (
+    SECRET_KEY, 
+    ALGORITHM, 
+    ACCESS_TYPE, 
+    REFRESH_TYPE, 
+    ACCESS_TOKEN_EXPIRE_MINUTES, 
+    REFRESH_TOKEN_EXPIRE_DAYS
+    )
 
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix=settings.prefix.api_data.prefix)
+router = APIRouter(prefix=settings.prefix.api_data.prefix, tags=['auth'])
 
 @router.get("/login")
 async def html_login(
@@ -68,6 +72,20 @@ async def login(
         return await html_login(request=request, error=error_data)
         
     response = RedirectResponse(url='/', status_code=302)
+
+    response.set_cookie(
+            key=ACCESS_TYPE,
+            value=login_data[ACCESS_TYPE],
+            httponly=True,
+            samesite="lax"
+        )
+    response.set_cookie(
+            key=REFRESH_TYPE,
+            value=login_data[REFRESH_TYPE],
+            httponly=True,
+            samesite="lax"
+
+        )
     return response
 
 @router.get("/register")
@@ -144,6 +162,43 @@ async def register(
 @router.get('/logout')
 async def logout():
     response = RedirectResponse(url=router.prefix + "/login")
-    #response.delete_cookie(ACCESS_TYPE)
-    #response.delete_cookie(REFRESH_TYPE)
+    response.delete_cookie(ACCESS_TYPE)
+    response.delete_cookie(REFRESH_TYPE)
+    return response
+
+
+@router.post("/refresh")
+async def refresh_tokens(
+    request: Request,
+    session: DBDI
+):
+    refresh_token = request.cookies.get(REFRESH_TYPE)
+    if not refresh_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Refresh token missing"
+        )
+    
+    user_service = UserService(session)
+    try:
+        access_token, new_refresh_token = await user_service.token_service.create_token(refresh_token)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=str(e)
+        )
+    
+    response = RedirectResponse(url='/', status_code=302)
+    response.set_cookie(
+        key=ACCESS_TYPE,
+        value=access_token,
+        httponly=True,
+        samesite="lax"
+    )
+    response.set_cookie(
+        key=REFRESH_TYPE,
+        value=new_refresh_token,
+        httponly=True,
+        samesite="lax"
+    )
     return response
