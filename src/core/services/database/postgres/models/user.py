@@ -12,6 +12,7 @@ import bcrypt
 from src.core.services.database.postgres.models.base import Base, int_pk, created_at, updated_at
 
 
+
 if TYPE_CHECKING:
     from src.core.services.database.postgres.models.refresh_token import RefreshTokenModel  # Path to your UserModel
 

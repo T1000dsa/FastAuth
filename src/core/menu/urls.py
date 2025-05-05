@@ -12,7 +12,6 @@ menu_items = [
     MenuItem('Home', '/'),
     MenuItem('Docs', '/docs'),
 
-    MenuItem('Profile', prefix + '/profile'),
     MenuItem('Registration',  prefix + '/register'),
     MenuItem('Login',  prefix + '/login'),
     MenuItem('Logout',  prefix + '/logout'),

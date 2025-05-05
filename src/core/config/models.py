@@ -1,4 +1,5 @@
 from pydantic import BaseModel, field_validator
+from typing import Optional
 
 class RunConfig(BaseModel):
     """
@@ -73,3 +74,33 @@ class DatabaseConfig(BaseModel):
 class JwtConfig(BaseModel):
     key:str
     algorithm:str = 'HS256'
+    ACCESS_TOKEN_EXPIRE_MINUTES:int = 30
+    REFRESH_TOKEN_EXPIRE_DAYS:int = 7
+
+class BaseClient(BaseModel):
+    client_id: str  # More standard naming than just 'id'
+    client_secret: str
+    redirect_uri: str  # More descriptive than 'uri'
+    scope: str = "email"  # Common default scope
+    
+    @property
+    def client_kwargs(self) -> dict:
+        return {"scope": self.scope}
+    
+class FacebookClient(BaseClient):
+    authorize_url: str = "https://www.facebook.com/v12.0/dialog/oauth"
+    access_token_url: str = "https://graph.facebook.com/v12.0/oauth/access_token"
+    api_base_url: str = "https://graph.facebook.com/v12.0/"
+
+class GithubClient(BaseClient):
+    authorize_url: str = "https://github.com/login/oauth/authorize"
+    access_token_url: str = "https://github.com/login/oauth/access_token"
+    api_base_url: str = "https://api.github.com/"
+    scope: str = "user:email"
+
+class StackoverflowClient(BaseClient):
+    authorize_url: str = "https://stackoverflow.com/oauth"
+    access_token_url: str = "https://stackoverflow.com/oauth/access_token"
+    api_base_url: str = "https://api.stackexchange.com/2.3/"
+    scope: str = "no_expiry"
+    key: Optional[str] = None

@@ -2,7 +2,7 @@ from fastapi import APIRouter
 import logging
 
 from src.core.dependencies.db_helper import DBDI
-from src.core.services.user.user import UserService
+from src.core.services.auth.user_service import UserService
 
 
 logger = logging.getLogger(__name__)

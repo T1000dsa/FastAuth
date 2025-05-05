@@ -4,8 +4,8 @@
 #CI/CD	GitHub Actions / GitLab CI
 #Monitoring	Grafana + Prometheus
 
-# TODO1 User Registration & Login [0] JWT/OAuth2
-# TODO2 Password Hashing & Security [0] bcrypt/Argon2
+# TODO1 User Registration & Login [1] JWT/OAuth2
+# TODO2 Password Hashing & Security [1] bcrypt/Argon2
 # TODO3 OAuth Provider Integration [0] Google/GitHub/Facebook
 # TODO4 Role-Based Access Control [0] RBAC implementation
 # TODO5 Email Verification [0] SMTP/SendGrid
@@ -33,6 +33,7 @@
 # docker compose up -d --build
 # docker stop $(docker ps -aq) 2>/dev/null; docker rm -f $(docker ps -aq) 2>/dev/null; docker rmi -f $(docker images -aq) 2>/dev/null; docker network prune -f 2>/dev/null; docker system prune -af 2>/dev/null
 
+from starlette.middleware.sessions import SessionMiddleware
 from fastapi import FastAPI
 from contextlib import asynccontextmanager
 from logging.config import dictConfig
@@ -42,6 +43,7 @@ import logging
 from src.core.config.config import settings
 from src.core.dependencies.db_helper import db_helper
 from src.core.config.logger import LOG_CONFIG
+from src.core.config.auth_config import SECRET_KEY
 
 from src.api.v1.endpoints.healthcheck import router as health_router
 from src.api.v1.endpoints.main_router import router as main_router
@@ -50,6 +52,8 @@ from src.api.v1.endpoints.side_router_1 import router as side_router_1
 
 
 app = FastAPI()
+
+app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):

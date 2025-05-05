@@ -10,6 +10,23 @@ from src.core.schemas.pydantic_schemas.user import UserSchema as User_pydantic
 
 logger = logging.getLogger(__name__)
 
+async def select_data_user_id(
+        session: AsyncSession,
+        user_id:int
+        ) -> Optional[UserModel]:
+    try:
+        query = select(UserModel).where(UserModel.id == user_id)
+        result = await session.execute(query)
+        data_user =  result.scalar_one_or_none()
+
+        if not data_user: # if data_user is none its will raise an error
+            return None
+        return data_user
+    
+    except Exception as err:
+        logger.error(f"Failed to select user data: {str(err)}")
+        raise err
+
 async def select_data_user(
     session: AsyncSession,
     username: str,

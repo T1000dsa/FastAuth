@@ -1,3 +1,4 @@
+from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import SQLAlchemyError, IntegrityError
 from sqlalchemy import select, update, delete, join
@@ -57,38 +58,43 @@ async def select_data(
         logger.error(f"Unexpected error in select_data: {e}")
         raise
     
-
 async def insert_data(
     session: AsyncSession,
-    data: RefreshToken = None
-) -> None:
-    logger.debug(f'{type(data)}')
+    data: RefreshToken
+) -> RefreshTokenModel:
+    """Properly handles refresh token insertion with error handling"""
     try:
-        if isinstance(data, RefreshToken):
-            res = data.model_validate(data, from_attributes=True)
-            token_data = {i: k for i, k in res.model_dump().items()}
-            new_data = RefreshTokenModel(**token_data)
-
-            existing = await session.get(RefreshTokenModel, token_data.get('id'))
-            if existing:
-                await session.merge(new_data)
-
-            await session.commit()
-            await session.refresh(new_data)  # Refresh to get any database-generated values
-            logger.debug('Create refresh success')
-            return new_data
-        else:
-            logger.error('Invalid data type provided')
-            raise ValueError("Invalid data type provided")
+        token_model = RefreshTokenModel(
+            user_id=data.user_id,
+            token=data.token,
+            expires_at=data.expires_at,
+            revoked=data.revoked,
+            replaced_by_token=data.replaced_by_token,
+            family_id=data.family_id,
+            previous_token_id=data.previous_token_id,
+            # created_at is automatically set by the model
+            device_info=data.device_info if hasattr(data, 'device_info') else None
+        )
+        
+        session.add(token_model)
+        await session.commit()
+        await session.refresh(token_model)
+        return token_model
         
     except IntegrityError as err:
-        logger.info(f'{err}') 
-        raise err
-        
-    except Exception as e:
-        logger.error(f'Error inserting refresh token: {e}')
         await session.rollback()
-        raise e
+        logger.error(f"Database integrity error: {err}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Database error occurred"
+        )
+    except Exception as e:
+        await session.rollback()
+        logger.error(f"Error inserting token: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to store token"
+        )
     
 async def delete_data(
     session: AsyncSession,
@@ -145,7 +151,7 @@ async def delete_all_user_tokens(
     except Exception as err:
         logger.critical(f'Something unpredictable: {err}')
     
-async def get_refresh_token_data(session: AsyncSession, token:str):
+async def get_refresh_token_data(session: AsyncSession, token:str) -> RefreshTokenModel:
     stm = (select(RefreshTokenModel).where(RefreshTokenModel.token == token))
     result = (await session.execute(stm)).scalars().all()
     valid_tokens:list[RefreshTokenModel] = []

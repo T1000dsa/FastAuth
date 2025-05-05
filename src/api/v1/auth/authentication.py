@@ -2,28 +2,28 @@ from fastapi import APIRouter, Depends, HTTPException, Form, status
 from fastapi.requests import Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy.exc import IntegrityError
+from typing import Annotated
 import logging
 
-from src.core.dependencies.form_data import form_data
-from src.core.config.auth_config import oauth2_scheme
+from src.core.services.auth.token_service import TokenService
+from src.core.services.auth.user_service import UserService
 from src.core.schemas.pydantic_schemas.user import UserSchema
 from src.core.config.config import templates, settings
 from src.core.utils.prepared_templates import prepare_template
 from src.core.dependencies.db_helper import DBDI
-from src.core.services.user.user import UserService
 from src.core.menu.urls import choice_from_menu, menu_items
+from src.core.dependencies.auth_deps import get_token_service, get_auth_service, GET_CURRENT_ACTIVE_USER
 from src.core.config.auth_config import (
-    SECRET_KEY, 
-    ALGORITHM, 
     ACCESS_TYPE, 
-    REFRESH_TYPE, 
-    ACCESS_TOKEN_EXPIRE_MINUTES, 
-    REFRESH_TOKEN_EXPIRE_DAYS
+    REFRESH_TYPE,
+    CSRF_TYPE, 
+    form_scheme
     )
 
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix=settings.prefix.api_data.prefix, tags=['auth'])
+
 
 @router.get("/login")
 async def html_login(
@@ -51,42 +51,32 @@ async def html_login(
 
 @router.post("/login/process")
 async def login(
-    request:Request,
-    session:DBDI,
-    form_data: form_data,
-    ):
-    user = UserService(session)
-
+    request: Request,
+    form_data: form_scheme,
+    auth_service: UserService = Depends(get_auth_service)
+):
     try:
-        login_data = await user.authenticate_user(
-        username=form_data.username,
-        password=form_data.password
+        tokens = await auth_service.authenticate_user(
+            username=form_data.username,
+            password=form_data.password
+        )
         
-   )
+        if not tokens:
+            return await html_login(request=request, error='Invalid credentials')
+        
+        response = RedirectResponse(url='/', status_code=302)
+        await auth_service.token_service.set_secure_cookies(
+            response=response,
+            access_token=tokens[ACCESS_TYPE],
+            refresh_token=tokens[REFRESH_TYPE],
+            csrf_token=tokens.get(CSRF_TYPE)
+        )
+        
+        return response
+        
     except Exception as err:
-        logger.error(err)
-        raise err
-    
-    if login_data is None:
-        error_data = 'There is no such user!'
-        return await html_login(request=request, error=error_data)
-        
-    response = RedirectResponse(url='/', status_code=302)
-
-    response.set_cookie(
-            key=ACCESS_TYPE,
-            value=login_data[ACCESS_TYPE],
-            httponly=True,
-            samesite="lax"
-        )
-    response.set_cookie(
-            key=REFRESH_TYPE,
-            value=login_data[REFRESH_TYPE],
-            httponly=True,
-            samesite="lax"
-
-        )
-    return response
+        logger.error(f"Login failed: {err}")
+        return await html_login(request=request, error='Login failed')
 
 @router.get("/register")
 async def html_register(
@@ -160,45 +150,40 @@ async def register(
 
 
 @router.get('/logout')
-async def logout():
+async def logout(
+    #current_user: GET_CURRENT_ACTIVE_USER
+    ):
     response = RedirectResponse(url=router.prefix + "/login")
+    #current_user.is_active = False
     response.delete_cookie(ACCESS_TYPE)
     response.delete_cookie(REFRESH_TYPE)
+    response.delete_cookie(CSRF_TYPE)
     return response
 
 
 @router.post("/refresh")
 async def refresh_tokens(
     request: Request,
-    session: DBDI
+    session: DBDI,
+    token_service: TokenService = Depends(get_token_service)
 ):
     refresh_token = request.cookies.get(REFRESH_TYPE)
     if not refresh_token:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Refresh token missing"
-        )
+        raise HTTPException(status_code=401, detail="Missing refresh token")
     
-    user_service = UserService(session)
     try:
-        access_token, new_refresh_token = await user_service.token_service.create_token(refresh_token)
+        new_tokens = await token_service.rotate_tokens(session, refresh_token)
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=str(e)
-        )
+        logger.error(f"Token rotation failed: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
     
     response = RedirectResponse(url='/', status_code=302)
-    response.set_cookie(
-        key=ACCESS_TYPE,
-        value=access_token,
-        httponly=True,
-        samesite="lax"
-    )
-    response.set_cookie(
-        key=REFRESH_TYPE,
-        value=new_refresh_token,
-        httponly=True,
-        samesite="lax"
+    await token_service.set_secure_cookies(
+        response=response,
+        access_token=new_tokens[ACCESS_TYPE],
+        refresh_token=new_tokens[REFRESH_TYPE],
+        csrf_token=new_tokens.get(CSRF_TYPE)
     )
     return response
