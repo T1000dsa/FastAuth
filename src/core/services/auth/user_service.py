@@ -2,6 +2,7 @@ from fastapi import Response, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional
 from datetime import datetime, timedelta, timezone
+from jose import JWTError, jwt
 import logging
 
 from src.core.config.config import settings
@@ -69,3 +70,12 @@ class UserService:
     
     async def create_user(self, data: UserSchema) -> None:
         await insert_data(self.session, data)
+
+    async def logout_user(self, user_id: int) -> None:
+        try:
+            user = await self.get_user_by_id(user_id)
+            if user:
+                await user.revoke_all_tokens(self.session)
+        except Exception as e:
+            logger.error(f"Error during token revocation: {e}")
+            raise

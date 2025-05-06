@@ -14,6 +14,7 @@ async def select_data_user_id(
         session: AsyncSession,
         user_id:int
         ) -> Optional[UserModel]:
+    logger.debug(f"{user_id=}")
     try:
         query = select(UserModel).where(UserModel.id == user_id)
         result = await session.execute(query)

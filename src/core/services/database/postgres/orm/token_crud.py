@@ -10,53 +10,60 @@ from src.core.services.database.postgres.models.refresh_token import RefreshToke
 from src.core.services.database.postgres.models.user import UserModel
 from src.core.schemas.pydantic_schemas.auth_schema import RefreshToken
 from src.core.schemas.pydantic_schemas.user import UserSchema
+from src.core.config.auth_config import (
+    pwd_context
+)
 
 
 logger = logging.getLogger(__name__)
 
 async def select_data(
     session: AsyncSession,
-    token: str,
-    model_type: type[RefreshToken] | type[UserSchema]  # Use the type itself instead of instance
-) -> list[RefreshTokenModel] | list[UserModel]:
-    """
-    Retrieve data based on token and model type.
-    
-    Args:
-        session: Async database session
-        token: The token to search for
-        model_type: The schema type (RefreshToken or UserSchema) to determine which model to query
-    
-    Returns:
-        List of model instances matching the token
-    """
+    token: Optional[str] = None,
+    user_id: Optional[int] = None,
+    model_type: Union[RefreshToken, UserSchema] = RefreshToken
+) -> Union[RefreshTokenModel, UserModel, None]:
     try:
-        if model_type is RefreshToken:
-            # Query RefreshTokenModel by token
-            result = await session.execute(
-                select(RefreshTokenModel)
-                .where(RefreshTokenModel.token == token)
-            )
-            return result.scalars().all()
+        logger.debug(f"Selecting data with token={token}, user_id={user_id}, model_type={model_type}")
         
-        elif model_type is UserSchema:
-            # Query UserModel by joining with refresh tokens
-            result = await session.execute(
-                select(UserModel)
-                .join(RefreshTokenModel, RefreshTokenModel.user_id == UserModel.id)
-                .where(RefreshTokenModel.token == token)
-            )
-            return result.scalars().all()
-        
+        if model_type == RefreshToken:
+            stmt = select(RefreshTokenModel)
+            if token:
+                # Compare with all tokens using SQLAlchemy's ORM
+                # This is inefficient but works for small datasets
+                # For production, consider a different approach
+                result = await session.execute(select(RefreshTokenModel))
+                for token_record in result.scalars():
+                    if pwd_context.verify(token, token_record.token):
+                        return token_record
+                return None
+            if user_id:
+                stmt = stmt.where(RefreshTokenModel.user_id == user_id)
         else:
-            raise ValueError(f"Unsupported model type: {model_type}")
-            
+            stmt = select(UserModel)
+            if user_id:
+                stmt = stmt.where(UserModel.id == user_id)
+            if token:
+                # For UserModel + token query
+                result = await session.execute(select(RefreshTokenModel))
+                for token_record in result.scalars():
+                    if pwd_context.verify(token, token_record.token):
+                        return await session.get(UserModel, token_record.user_id)
+                return None
+
+        if not token and not user_id:
+            raise ValueError('Need to provide at least one argument (token or user_id)')
+
+        result = (await session.execute(stmt)).scalar_one_or_none()
+        logger.debug(f"Query result: {result}")
+        return result
+
     except SQLAlchemyError as e:
-        logger.error(f"Database error in select_data: {e}")
-        raise
-    except Exception as e:
-        logger.error(f"Unexpected error in select_data: {e}")
-        raise
+        logger.error(f"Database error in select_data: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Database error"
+        )
     
 async def insert_data(
     session: AsyncSession,
@@ -98,38 +105,31 @@ async def insert_data(
     
 async def delete_data(
     session: AsyncSession,
-    data: UserModel,
     token:Optional[str],
     user_id:Optional[int]
 ) -> None:
     try:
-        if isinstance(data, UserModel):
-            if token and user_id: # 1 1
+        if token and user_id: # 1 1
                 await session.execute(
                 delete(RefreshTokenModel)
                 .where(RefreshTokenModel.token == token and RefreshTokenModel.user_id == user_id))
                 await session.commit()
 
-            if token and not user_id: # 1 0
+        if token and not user_id: # 1 0
                 await session.execute(
                 delete(RefreshTokenModel)
                 .where(RefreshTokenModel.token == token))
                 await session.commit()
             
-            if not token and user_id: # 0 1
+        if not token and user_id: # 0 1
                 await session.execute(
                 delete(RefreshTokenModel)
                 .where(RefreshTokenModel.user_id == user_id))
                 await session.commit()
-            else:
-
-                logger.error('Invalid data type provided')
-                raise ValueError("Invalid data type provided")
-
         else:
             logger.error('Invalid data type provided')
             raise ValueError("Invalid data type provided")
-        
+
     except ValueError as err:
         logger.error('Invalid data type provided')
         raise err

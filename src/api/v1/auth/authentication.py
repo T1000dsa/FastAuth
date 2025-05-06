@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Form, status
 from fastapi.requests import Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy.exc import IntegrityError
-from typing import Annotated
+from jose import JWTError, jwt
 import logging
 
 from src.core.services.auth.token_service import TokenService
@@ -17,9 +17,9 @@ from src.core.config.auth_config import (
     ACCESS_TYPE, 
     REFRESH_TYPE,
     CSRF_TYPE, 
-    form_scheme
+    form_scheme,
+    oauth2_scheme
     )
-
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix=settings.prefix.api_data.prefix, tags=['auth'])
@@ -151,13 +151,32 @@ async def register(
 
 @router.get('/logout')
 async def logout(
-    #current_user: GET_CURRENT_ACTIVE_USER
-    ):
+    request: Request,
+    auth_service: UserService = Depends(get_auth_service)
+):
     response = RedirectResponse(url=router.prefix + "/login")
-    #current_user.is_active = False
-    response.delete_cookie(ACCESS_TYPE)
-    response.delete_cookie(REFRESH_TYPE)
-    response.delete_cookie(CSRF_TYPE)
+    
+    # Try to get token from cookies
+    token = request.cookies.get(ACCESS_TYPE)
+    
+    if token:
+        try:
+            payload = jwt.decode(token, settings.jwt.key, algorithms=[settings.jwt.algorithm])
+            user_id = payload.get("sub")
+            if user_id:
+                await auth_service.logout_user(int(user_id))
+        except (JWTError, ValueError) as e:
+            logger.debug(f"Token error during logout: {e}")
+    
+    # Delete cookies
+    for cookie_name in [ACCESS_TYPE, REFRESH_TYPE, CSRF_TYPE]:
+        response.delete_cookie(
+            cookie_name,
+            path="/",
+            domain=None,
+            secure=True,
+            httponly=True
+        )
     return response
 
 

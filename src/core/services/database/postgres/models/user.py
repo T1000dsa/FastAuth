@@ -4,10 +4,14 @@ from sqlalchemy.orm import (
     Mapped, 
     relationship
     )
+from sqlalchemy.ext.asyncio import (
+    AsyncSession,
+    )
 from sqlalchemy import func, String
 from typing import Optional,List, TYPE_CHECKING
 import logging
 import bcrypt
+
 
 from src.core.services.database.postgres.models.base import Base, int_pk, created_at, updated_at
 
@@ -55,11 +59,20 @@ class UserModel(Base):
             logger.error(f"Password verification failed for user {self.id}: {err}")
             return False
         
-    def revoke_all_tokens(self):
+    async def revoke_all_tokens(self, session:AsyncSession):
         """Revoke all refresh tokens for this user"""
-        for token in self.refresh_tokens:
-            token.revoked = True
-            token.replaced_by_token = None
+        try:
+            # Explicitly load the refresh_tokens relationship
+            await session.refresh(self, ['refresh_tokens'])
+            
+            for token in self.refresh_tokens:
+                token.is_revoked = True
+                session.add(token)
+            
+            await session.commit()
+        except Exception as e:
+            await session.rollback()
+            raise e
 
     def revoke_device_tokens(self, device_info: str):
         """Revoke tokens for a specific device"""

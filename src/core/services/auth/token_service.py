@@ -22,7 +22,8 @@ from src.core.services.database.postgres.orm.token_crud import (
     insert_data, 
     delete_data, 
     delete_all_user_tokens, 
-    get_refresh_token_data
+    get_refresh_token_data,
+    select_data
 )
 
 logger = logging.getLogger(__name__)
@@ -120,8 +121,23 @@ class TokenService:
                     detail="Invalid token payload"
                 )
             
-            # 2. Check for reuse
-            if await self.is_token_revoked(session, refresh_token):
+            # 2. Get existing token record
+            old_token_record = await select_data(
+                session,
+                token=refresh_token,  # Now passing raw token
+                model_type=RefreshToken
+            )
+
+            logger.debug(f'{old_token_record=}')
+            
+            if not old_token_record:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Invalid refresh token"
+                )
+                
+            # Check if token was already revoked
+            if old_token_record.revoked:
                 await self.revoke_all_user_tokens(session, user_id)
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
@@ -130,18 +146,22 @@ class TokenService:
             
             # 3. Create new tokens
             new_tokens = await self.create_both_tokens({"sub": user_id})
-            
-            # 4. Store and revoke
             hashed_new_token = self.hash_token(new_tokens[REFRESH_TYPE])
+            
+            # 4. Store new token and revoke old one
             await insert_data(session, RefreshToken(
                 token=hashed_new_token,
                 user_id=user_id,
-                expires_at=datetime.now(timezone.utc) + timedelta(days=settings.jwt.REFRESH_TOKEN_EXPIRE_DAYS)
+                expires_at=datetime.now(timezone.utc) + timedelta(days=settings.jwt.REFRESH_TOKEN_EXPIRE_DAYS),
+                replaced_by_token=hashed_new_token,
+                family_id=old_token_record.family_id,
+                device_info=old_token_record.device_info
             ))
             
             # Revoke old token
-            hashed_old_token = self.hash_token(refresh_token)
-            await delete_data(session, hashed_old_token)
+            old_token_record.revoked = True
+            old_token_record.replaced_by_token = hashed_new_token
+            await session.commit()
             
             return new_tokens
             
@@ -150,6 +170,7 @@ class TokenService:
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail=str(e)
             )
+
     
     # Database operations (delegate to ORM)
     async def store_refresh_token(
@@ -187,10 +208,10 @@ class TokenService:
                 detail="Failed to store token"
             )
 
-    async def revoke_token(self, session: AsyncSession, data:UserModel, token: Optional[str], user_id:Optional[int]) -> None:
+    async def revoke_token(self, session: AsyncSession, token: Optional[str], user_id:Optional[int]) -> None:
         """Take token OR user_ir. If none of them provided, will raised ValueError("Invalid data type provided")"""
         hashed_token = self.hash_token(token)
-        await delete_data(session, data, hashed_token, user_id)
+        await delete_data(session, hashed_token, user_id)
 
     async def revoke_all_user_tokens(self, session: AsyncSession, user_id: int) -> None:
         await delete_all_user_tokens(session, user_id)
