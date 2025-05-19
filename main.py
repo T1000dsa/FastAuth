@@ -48,6 +48,7 @@ from src.core.config.auth_config import SECRET_KEY
 from src.api.v1.endpoints.healthcheck import router as health_router
 from src.api.v1.endpoints.main_router import router as main_router
 from src.api.v1.auth.authentication import router as auth_router
+#from src.api.v1.auth.social_auth import router as social_auth_router
 from src.api.v1.endpoints.side_router_1 import router as side_router_1
 
 

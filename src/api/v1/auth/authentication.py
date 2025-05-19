@@ -12,7 +12,7 @@ from src.core.config.config import templates, settings
 from src.core.utils.prepared_templates import prepare_template
 from src.core.dependencies.db_helper import DBDI
 from src.core.menu.urls import choice_from_menu, menu_items
-from src.core.dependencies.auth_deps import get_token_service, get_auth_service, GET_CURRENT_ACTIVE_USER
+from src.core.dependencies.auth_deps import GET_TOKEN_SERVICE, GET_CURRENT_ACTIVE_USER, GET_AUTH_SERVICE, GET_CURRENT_USER
 from src.core.config.auth_config import (
     ACCESS_TYPE, 
     REFRESH_TYPE,
@@ -53,7 +53,7 @@ async def html_login(
 async def login(
     request: Request,
     form_data: form_scheme,
-    auth_service: UserService = Depends(get_auth_service)
+    auth_service: GET_AUTH_SERVICE
 ):
     try:
         tokens = await auth_service.authenticate_user(
@@ -67,11 +67,8 @@ async def login(
         response = RedirectResponse(url='/', status_code=302)
         await auth_service.token_service.set_secure_cookies(
             response=response,
-            access_token=tokens[ACCESS_TYPE],
-            refresh_token=tokens[REFRESH_TYPE],
-            csrf_token=tokens.get(CSRF_TYPE)
+            tokens=tokens
         )
-        
         return response
         
     except Exception as err:
@@ -103,15 +100,16 @@ async def html_register(
 @router.post("/register/process")
 async def register(
     request:Request,
-    session: DBDI,
+    auth_service: GET_AUTH_SERVICE,
     username: str = Form(...),
     password: str = Form(...),
     password_again: str = Form(...),
     mail: str = Form(""),
     bio: str = Form("")
+    
 ):
 
-    logger.info('inside register')
+    logger.info(f'User: {username} tries to regist...')
 
     user_data = UserSchema(
         username=username,
@@ -121,7 +119,7 @@ async def register(
         bio=bio
     )
 
-    user = UserService(session)
+    user = auth_service
     try:
         await user.create_user(user_data)
  
@@ -152,31 +150,17 @@ async def register(
 @router.get('/logout')
 async def logout(
     request: Request,
-    auth_service: UserService = Depends(get_auth_service)
+    auth_service: GET_AUTH_SERVICE
 ):
     response = RedirectResponse(url=router.prefix + "/login")
     
-    # Try to get token from cookies
-    token = request.cookies.get(ACCESS_TYPE)
+    try:
+        response = await auth_service.logout_user(request=request, response=response)
+    except (JWTError, ValueError) as e:
+        logger.debug(f"Token error during logout: {e}")
+    except Exception as e:
+        logger.debug(f"Unexpected error: {e}")
     
-    if token:
-        try:
-            payload = jwt.decode(token, settings.jwt.key, algorithms=[settings.jwt.algorithm])
-            user_id = payload.get("sub")
-            if user_id:
-                await auth_service.logout_user(int(user_id))
-        except (JWTError, ValueError) as e:
-            logger.debug(f"Token error during logout: {e}")
-    
-    # Delete cookies
-    for cookie_name in [ACCESS_TYPE, REFRESH_TYPE, CSRF_TYPE]:
-        response.delete_cookie(
-            cookie_name,
-            path="/",
-            domain=None,
-            secure=True,
-            httponly=True
-        )
     return response
 
 
@@ -184,7 +168,7 @@ async def logout(
 async def refresh_tokens(
     request: Request,
     session: DBDI,
-    token_service: TokenService = Depends(get_token_service)
+    token_service: GET_TOKEN_SERVICE
 ):
     refresh_token = request.cookies.get(REFRESH_TYPE)
     if not refresh_token:
@@ -206,3 +190,11 @@ async def refresh_tokens(
         csrf_token=new_tokens.get(CSRF_TYPE)
     )
     return response
+
+@router.post('/test1')
+async def test_auth_1(user: GET_CURRENT_USER):
+    return {"message": "Authenticated", "user": user.username}
+
+@router.post('/test2') 
+async def test_auth_2(user: GET_CURRENT_ACTIVE_USER):
+    return {"message": "Active user", "user": user.username}

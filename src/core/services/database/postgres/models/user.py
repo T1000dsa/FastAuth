@@ -34,7 +34,7 @@ class UserModel(Base):
     bio: Mapped[Optional[str]] = mapped_column(String(500))
     join_date: Mapped[created_at]
     last_time_login: Mapped[updated_at]
-    is_active:Mapped[bool] = mapped_column(default=True)
+    is_active:Mapped[bool] = mapped_column(default=False)
     is_superuser: Mapped[bool] = mapped_column(default=False)
 
     refresh_tokens: Mapped[List["RefreshTokenModel"]] = relationship(
@@ -66,7 +66,7 @@ class UserModel(Base):
             await session.refresh(self, ['refresh_tokens'])
             
             for token in self.refresh_tokens:
-                token.is_revoked = True
+                token.revoked = True
                 session.add(token)
             
             await session.commit()
